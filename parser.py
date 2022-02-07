@@ -1,3 +1,4 @@
+import re
 import zipfile
 import csv
 from bs4 import BeautifulSoup, Tag, NavigableString
@@ -6,7 +7,6 @@ import urllib.request
 
 file = "D:/Desktop/temp.zip"
 output = "D:/Desktop/anki.csv"
-deck = "Default"
 
 cards = []
 
@@ -21,8 +21,18 @@ def parse_file(soup):
             push_toggles(ele, t)
 
 
+def get_deck_name(tag):
+    try:
+        deck_name = re.search('/(?<=#).*?(?=::|$)/g', tag).group(1)
+    except AttributeError:
+        deck_name = 'Default'
+
+    return deck_name
+
+
 def push_toggles(toggles, tag):
     global cards
+    deck = get_deck_name(tag)
     for toggle in toggles:
         obj = {'deckName': deck,
                'modelName': "cloze",
