@@ -6,28 +6,56 @@ import urllib.request
 
 file = "D:/Desktop/temp.zip"
 output = "D:/Desktop/anki.csv"
+deck = "Default"
 
 cards = []
 
 
 def parse_file(soup):
-    tag = soup.find("h1", {"class": "page-title"}).text
-    toggles = soup.find_all("ul", {"class": "toggle"})
+    content = soup.find("div", {"class": "page-body"}).children
+    t = None
+    for ele in content:
+        if ele.name == 'h1':
+            t = ele.text
+        elif ele.name == 'ul':
+            push_toggles(ele, t)
+
+
+def push_toggles(toggles, tag):
     global cards
-    deck = tag.match((?<=#).*(?=::|$))
     for toggle in toggles:
-        obj = {'deckName': deck, 'modelName': "cloze", 'fields': get_card_from_toggle(toggle), 'tags': [tag]}
+        obj = {'deckName': deck,
+               'modelName': "cloze",
+               'fields': get_card_from_toggle(toggle),
+               'tags': [tag],
+               "options": {
+                   "allowDuplicate": False,
+                   "duplicateScope": deck,
+                   "duplicateScopeOptions": {
+                       "deckName": deck,
+                       "checkChildren": False,
+                       "checkAllModels": False
+                   }
+               },
+               }
+        # print(obj['fields'])
         cards.append(obj)
 
 
 def get_card_from_toggle(toggle):
-    toggle = toggle.li.details
+    toggle = toggle.details
 
     header = list(toggle.summary.children)
-    body = list(toggle.p.children)
+
+    body_card = ""
+    if toggle.p is not None:
+        # remove first element aka summary
+        body = list(toggle.children)[1:]
+        for detail in body:
+            if detail is not None:
+                body_card += process_card(detail)
 
     header_card = process_card(header)
-    body_card = process_card(body)
     return {'Text': header_card, 'Extra': body_card}
 
 
