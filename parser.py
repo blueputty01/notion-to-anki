@@ -6,7 +6,6 @@ import urllib.request
 
 file = "D:/Desktop/temp.zip"
 output = "D:/Desktop/anki.csv"
-deck = "AP Chemistry"
 
 cards = []
 
@@ -15,6 +14,7 @@ def parse_file(soup):
     tag = soup.find("h1", {"class": "page-title"}).text
     toggles = soup.find_all("ul", {"class": "toggle"})
     global cards
+    deck = tag.match((?<=#).*(?=::|$))
     for toggle in toggles:
         obj = {'deckName': deck, 'modelName': "cloze", 'fields': get_card_from_toggle(toggle), 'tags': [tag]}
         cards.append(obj)
