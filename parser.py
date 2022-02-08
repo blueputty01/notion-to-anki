@@ -23,7 +23,7 @@ def parse_file(soup):
 
 def get_deck_name(tag):
     try:
-        deck_name = re.search('/(?<=#).*?(?=::|$)/g', tag).group(1)
+        deck_name = re.search('(?<=#)(.+?)(?=::|$)', tag).group(1)
     except AttributeError:
         deck_name = 'Default'
 
