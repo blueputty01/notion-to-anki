@@ -105,7 +105,7 @@ def process_card(parent):
                         counter = int(cloze[0])
                         cloze = cloze[2:-1]
 
-                    cloze = f"{{{{c{counter}::{cloze} }}}}"
+                    cloze = f"{{{{c{counter}::{cloze}}}}}"
                     counter += 1
                     card += cloze
             elif node.has_attr("class"):
