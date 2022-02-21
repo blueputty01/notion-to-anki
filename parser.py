@@ -115,9 +115,9 @@ def process_card(parent):
                     counter = int(cloze[0])
                     cloze = cloze[3:len(cloze)]
 
-                    cloze = f"{{{{c{counter}::{cloze}}}}}"
-                    counter += 1
-                    card += cloze
+                cloze = f"{{{{c{counter}::{cloze}}}}}"
+                counter += 1
+                card += cloze
             elif node.has_attr("class"):
                     if node.get("class")[0] == "notion-text-equation-token":
                         math = node.find("annotation")
