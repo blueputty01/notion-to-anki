@@ -42,7 +42,7 @@ def get_deck_name(tag):
         deck_name = re.search('(?<=#)(.+?)(?=::|$)', tag).group(1)
     except AttributeError:
         deck_name = 'Default'
-        print('bro are you sure you want this to be added to the default deck?')
+        print('A card was discovered without a deck name. It will be added to the deck called Default')
 
     if deck_name in deck_name_dict:
         deck_name = deck_name_dict[deck_name]
@@ -81,6 +81,8 @@ def get_card_from_toggle(deck, tag, toggle):
                 media['picture'] = {'path': str(full_path.resolve()), 'filename': anki_name, 'fields': ['Extra']}
             else:
                 body_card += process_card(detail)
+                body_card += "<br>"
+    body_card = body_card[:-4]
 
     header_card = process_card(header)
     return {'deckName': deck,
@@ -104,26 +106,31 @@ def process_card(parent):
     global notion_name
     card = ""
     counter = 1
-    for node in parent:
-        if isinstance(node, NavigableString):
-            card += node
-        elif node.name == "code":
-            cloze = process_card(list(node.children))
+    if not isinstance(parent, list):
+        print(parent.name)
+        if parent.name == 'p':
+            card += str(parent.children)
+            print(parent)
+    else:
+        for node in parent:
+            if isinstance(node, NavigableString):
+                card += node
+            elif node.name == "code":
+                cloze = process_card(list(node.children))
 
-            if cloze is not None:
-                if re.match("^\\d::", cloze):
-                    counter = int(cloze[0])
-                    cloze = cloze[3:len(cloze)]
+                if cloze is not None:
+                    if re.match("^\\d::", cloze):
+                        counter = int(cloze[0])
+                        cloze = cloze[3:len(cloze)]
 
-                cloze = f"{{{{c{counter}::{cloze}}}}}"
-                counter += 1
-                card += cloze
+                    cloze = f"{{{{c{counter}::{cloze}}}}}"
+                    counter += 1
+                    card += cloze
             elif node.has_attr("class"):
                 if node.get("class")[0] == "notion-text-equation-token":
                     math = node.find("annotation")
                     formula = math.text
-                    card += f"\({formula}\)"
-
+                    card += f'\({formula}\)'
     return card
 
 
@@ -137,12 +144,12 @@ def write_file(out):
 
 def parse_all_files(d):
     # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
-    onlyfiles = [f for f in listdir(d) if isfile(join(d, f))]
+    only_files = [f for f in listdir(d) if isfile(join(d, f))]
     reg = re.compile("Export-\w{8}-\w{4}-\w{4}-\w{4}-\w{12}.zip")
 
     global all_zips
 
-    local_zips = list(filter(reg.match, onlyfiles))
+    local_zips = list(filter(reg.match, only_files))
 
     for z in local_zips:
         z = input_dir / z
@@ -168,7 +175,7 @@ def request(action, **params):
 
 def invoke(action, **params):
     request_json = json.dumps(request(action, **params)).encode('utf-8')
-    print(request_json)
+    # print(request_json)
 
     a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -190,13 +197,25 @@ def invoke(action, **params):
         return response['result']
     else:
         print("Port is not open")
+        return
 
 
 def auto_send():
     # actions = [request('addNotes', notes=notes)]
     result = invoke('addNotes', notes=notes)
-    # notes = invoke('getTags')
-    print(result)
+
+    rejected = []
+
+    total = len(notes)
+    for j, note in enumerate(notes):
+        if result is None or result[j] is None:
+            rejected.append(f'{note["fields"]} under {note["deckName"]}')
+
+    rej_count = len(rejected)
+    print(f'{total - rej_count} / {total} notes were successfully added to Anki.')
+    if rej_count > 0:
+        print("The following notes were rejected by Anki:")
+        print(*rejected, sep='\n')
 
 
 if __name__ == "__main__":
