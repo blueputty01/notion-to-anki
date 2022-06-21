@@ -1,18 +1,34 @@
 import os
 import re
 import shutil
+import typing
 import zipfile
 import csv
 import socket
+from urllib.parse import unquote
+
 from bs4 import BeautifulSoup, Tag, NavigableString
 import json
 import urllib.request
 from pathlib import Path
 from os import listdir
 from os.path import isfile, join
+import platform
 
-input_dir = Path("D:/Desktop")
-output = "D:/Desktop/anki.csv"
+# TODO: use beautiful soup to update tags
+
+system = platform.system()
+
+input_dir = None
+output = None
+
+if system == "Linux":
+    input_dir = Path("/home/alex/desktop")
+    output = "/home/alex/desktop/anki.csv"
+else:
+    input_dir = Path("D:/Desktop")
+    output = "D:/Desktop/anki.csv"
+
 deck_name_dict = {
     'Spanish': 'AP Spanish',
     'Chemistry': 'AP Chemistry',
@@ -60,6 +76,60 @@ def push_toggles(toggles, tag):
 
 
 def get_card_from_toggle(deck, tag, toggle):
+    counter = 1
+    media = {}
+
+    def process_field(node):
+        global notion_name
+        nonlocal counter
+        card = ""
+
+        direct = ["strong", "em", "span"]
+        clean = ["ol", "li", "p"]
+        if isinstance(node, list):
+            parts = ""
+            for n in node:
+                parts += process_field(n)
+            return parts
+
+        if isinstance(node, NavigableString):
+            card += node
+        elif node.name == "figure":
+            image_path = unquote(node.a.img.get("src"))
+            image_fname = Path(image_path).name
+            full_path = media_path / image_fname
+            anki_name = notion_name.stem + image_fname
+            media['picture'] = {'path': str(full_path.resolve()), 'filename': anki_name, 'fields': ['Extra']}
+        elif node.name == "code":
+            cloze = process_field(list(node.children))
+
+            if cloze is not None:
+                if re.match("^\\d::", cloze):
+                    counter = int(cloze[0])
+                    cloze = cloze[3:len(cloze)]
+
+                cloze = f"{{{{c{counter}::{cloze}}}}}"
+                counter += 1
+                card += cloze
+        elif node.has_attr("class") and \
+                len(node.get("class")) > 0 and node.get("class")[0] == "notion-text-equation-token":
+            math = node.find("annotation")
+            formula = math.text
+            card += f'\({formula}\)'
+        elif node.name in direct:
+            card += str(node)
+        elif node.name in clean:
+            params = ""
+
+            if node.name == "ol":
+                params += f'start="{node.get("start")}"'
+            card += f"<{node.name} {params}>{process_field(list(node.children))}</{node.name}>"
+
+            if node.name == "p":
+                card += "<br>"
+
+        return card
+
     toggle = toggle.details
 
     header = list(toggle.summary.children)
@@ -68,23 +138,11 @@ def get_card_from_toggle(deck, tag, toggle):
     # remove first element aka summary
     body = list(toggle)[1:]
 
-    media = {}
-
     for detail in body:
         if detail is not None:
-            if hasattr(detail, 'name') and detail.name == "figure":
-                image_path = detail.a.img.get("src")
-                image_fname = Path(image_path).name
-                full_path = media_path / image_fname
-                anki_name = notion_name.stem + image_fname
-                print(str(full_path.resolve()))
-                media['picture'] = {'path': str(full_path.resolve()), 'filename': anki_name, 'fields': ['Extra']}
-            else:
-                body_card += process_card(detail)
-                body_card += "<br>"
-    body_card = body_card[:-4]
+            body_card += process_field(detail)
 
-    header_card = process_card(header)
+    header_card = process_field(header)
     return {'deckName': deck,
             'modelName': "cloze",
             'fields': {'Text': header_card, 'Extra': body_card},
@@ -100,38 +158,6 @@ def get_card_from_toggle(deck, tag, toggle):
             },
             **media
             }
-
-
-def process_card(parent):
-    global notion_name
-    card = ""
-    counter = 1
-    if not isinstance(parent, list):
-        print(parent.name)
-        if parent.name == 'p':
-            card += str(parent.children)
-            print(parent)
-    else:
-        for node in parent:
-            if isinstance(node, NavigableString):
-                card += node
-            elif node.name == "code":
-                cloze = process_card(list(node.children))
-
-                if cloze is not None:
-                    if re.match("^\\d::", cloze):
-                        counter = int(cloze[0])
-                        cloze = cloze[3:len(cloze)]
-
-                    cloze = f"{{{{c{counter}::{cloze}}}}}"
-                    counter += 1
-                    card += cloze
-            elif node.has_attr("class"):
-                if node.get("class")[0] == "notion-text-equation-token":
-                    math = node.find("annotation")
-                    formula = math.text
-                    card += f'\({formula}\)'
-    return card
 
 
 def write_file(out):
@@ -203,7 +229,6 @@ def invoke(action, **params):
 def auto_send():
     # actions = [request('addNotes', notes=notes)]
     result = invoke('addNotes', notes=notes)
-
     rejected = []
 
     total = len(notes)
